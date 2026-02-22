@@ -1,0 +1,81 @@
+flowchart TB
+    subgraph Legend[图例]
+        direction LR
+        L1[组件] --> L2[数据流] --> L3[输出/输入]
+    end
+
+    subgraph Input
+        direction TB
+        I1[Token IDs] --> I2[TokenEmbedding]
+    end
+
+    subgraph Core[TinySeek 核心模型]
+        direction TB
+        
+        I2 --> B1
+        
+        subgraph B1[ModelBlock 1]
+            direction TB
+            b1_in[输入] --> b1_attn[MLA 注意力]
+            b1_attn --> b1_add1[残差连接 + LayerNorm]
+            b1_add1 --> b1_moe[MoE 层]
+            b1_moe --> b1_add2[残差连接 + LayerNorm]
+            b1_add2 --> b1_out[输出]
+        end
+
+        B1 --> B2
+        
+        subgraph B2[ModelBlock 2]
+            direction TB
+            b2_in[输入] --> b2_attn[MLA 注意力]
+            b2_attn --> b2_add1[残差连接 + LayerNorm]
+            b2_add1 --> b2_moe[MoE 层]
+            b2_moe --> b2_add2[残差连接 + LayerNorm]
+            b2_add2 --> b2_out[输出]
+        end
+
+        B2 --> Bn[... ModelBlock N ...]
+        Bn --> H[Hidden States]
+    end
+
+    subgraph MoE_Detail[MoE 内部结构]
+        direction TB
+        moe_in[输入] --> gate[Gating Network\n计算路由得分]
+        gate --> noise[添加噪声]
+        noise --> topk[Top-K 选择]
+        topk --> experts[专家 FFNs]
+        experts --> agg[加权聚合]
+        agg --> shared[Shared Experts]
+        shared --> moe_out[输出 + 路由得分 Lexp]
+    end
+
+    subgraph Output_Heads[输出头]
+        direction TB
+        H --> FC1[fc1]
+        H --> FC2[fc2]
+        FC1 --> L1[Logits c_t]
+        FC2 --> L2[Logits n_t]
+    end
+
+    subgraph Gated_System[Gated TinySeek 系统]
+        direction TB
+        G_in[Hidden States] --> G_gate[gate 模型\n取最后非填充位]
+        G_gate --> G_softmax[Softmax + 阈值]
+        G_softmax --> G_select[选择专家索引]
+        G_select --> G_route[分组路由]
+        G_route --> G_exp1[专家 1\nTinySeek]
+        G_route --> G_exp2[专家 2\nTinySeek]
+        G_route --> G_exp3[... 6个专家 ...]
+        G_exp1 & G_exp2 & G_exp3 --> G_merge[加权合并]
+        G_merge --> G_out[最终输出]
+    end
+
+    %% 连接关系
+    b1_moe -.-> MoE_Detail
+    b2_moe -.-> MoE_Detail
+    
+    style Input fill:#e1f5fe
+    style Core fill:#f3e5f5
+    style MoE_Detail fill:#fff3e0
+    style Output_Heads fill:#e8f5e8
+    style Gated_System fill:#ffe0e0
